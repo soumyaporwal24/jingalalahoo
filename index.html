@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Sparkle 3.0</title>
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Sparkle 3.0 — Freshers' Party payment portal. Download QR and submit proof via Google Form.">
+
+<style>
+  :root{
+    --max:980px;
+    --radius:16px;
+    --muted: rgba(255,255,255,0.78);
+    --panel-bg: rgba(8,6,14,0.62);
+    --accentA: #9b6bff;
+    --accentB: #6da6ff;
+    --accentC: #7ef0f0;
+    --glass: rgba(255,255,255,0.03);
+    --focus: rgba(155,107,255,0.14);
+  }
+/* Base */
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial;color:#fff;background:#06040a;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}button{font:inherit}
+
+/* Background */
+.theme-bg{position:fixed;inset:0;background-image:url('/assets/theme.png');background-size:cover;background-position:center center;z-index:0;will-change:transform;transition:transform 300ms linear;filter:contrast(.96) saturate(1.05)}
+.bg-overlay{position:fixed;inset:0;background:linear-gradient(180deg, rgba(3,2,8,0.65), rgba(6,4,10,0.78));backdrop-filter: blur(6px);z-index:1;pointer-events:none}
+
+/* Layout */
+.wrap{position:relative;z-index:2;max-width:var(--max);margin:36px auto;padding:20px}
+header{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:6vh}
+.subtitle{color:var(--muted);font-size:clamp(12px,1.6vw,14px);margin-top:-6px}
+
+/* -------------------- INTRO (CENTERED) -------------------- */
+/* Full viewport fixed layer that centers headline + motto over canvas */
+#introLayer{
+  position:fixed;
+  inset:0;
+  z-index:60;
+  pointer-events:none;
+  display:flex;
+  flex-direction:column;       /* stack SVG over tagline */
+  align-items:center;
+  justify-content:center;     /* vertical center */
+  gap:18px;
+  padding:24px;
+  background:transparent;
+}
+
+/* canvas covers the intro layer but sits behind visual elements */
+#introCanvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  display:block;
+  z-index:59;                 /* keep below SVG and tagline */
+}
+
+/* intro-stage holds the SVG headline; center it and constrain size */
+.intro-stage{
+  position:relative;
+  width:min(86vw,1000px);
+  max-width:1100px;
+  height:auto;                /* let SVG determine height */
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+  z-index:62;                 /* above canvas */
+}
+
+/* SVG headline styling (no structural changes) */
+.logo-svg{width:100%;height:auto;filter:drop-shadow(0 28px 80px rgba(80,40,160,0.28));transform-origin:center}
+#logoSvg { z-index:62; pointer-events:none; display:block; }
+
+/* Make the headline visually larger and stronger than the motto:
+   - Increased SVG text size (see inline SVG attribute change below)
+   - Add slight stroke for contrast on busy backgrounds */
+#headline {
+  paint-order: stroke fill;
+  stroke: rgba(0,0,0,0.18);
+  stroke-width:3px;
+  filter: drop-shadow(0 10px 30px rgba(0,0,0,0.45));
+}
+
+/* Centered motto — reduced size and pure white color (no gradient) */
+.intro-title{
+  font-weight:600;
+  font-size: clamp(14px, 1.4vw, 15px);  /* slightly smaller than before */
+  letter-spacing:0.4px;
+  line-height:1.3;
+  text-align:center;
+  color:#ffffff;                         /* pure white as requested */
+  text-shadow: 0 4px 18px rgba(0,0,0,0.45);
+  transform-origin:center;
+  opacity:0;                       /* revealed by existing showIntroTag() */
+  transform:translateY(6px);
+  transition:opacity .38s ease, transform .38s ease;
+  z-index:63;                      /* keep above canvas */
+  pointer-events:none;
+  max-width: 90%;
+  margin: 0 auto;
+  padding: 0 10px;
+}
+
+/* keep a fallback .intro-tag selector for compatibility with older CSS references */
+.intro-tag{display:none;}
+
+/* -------------------- rest unchanged -------------------- */
+
+/* Main Panel */
+.logo-small{width:92px;height:92px;border-radius:14px;border:2px solid rgba(255,255,255,0.06);background:linear-gradient(90deg,var(--accentA),var(--accentB));display:block;box-shadow:0 12px 40px rgba(0,0,0,0.6)}
+.panel{margin:28px auto;background:var(--panel-bg);border-radius:var(--radius);padding:20px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 30px 80px rgba(0,0,0,0.6);backdrop-filter: blur(6px)}
+.phase-row{display:flex;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap}
+.phase{position:relative;padding:10px 14px;border-radius:12px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.04);font-weight:700;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.phase:hover{box-shadow:0 18px 46px rgba(40,30,100,0.07);transform:translateY(-3px)}
+.phase.active{background:linear-gradient(90deg,var(--accentA),var(--accentB));color:#07101a;box-shadow:0 14px 40px rgba(80,60,180,0.08);transform:translateY(-6px)}
+.phase.locked{opacity:0.52;cursor:not-allowed}
+
+/* Selected info and seat counter */
+.selected{margin-top:6px;text-align:center;color:var(--muted);font-size:14px}
+.seats{margin-top:6px;text-align:center;color:var(--muted);font-size:13px}
+
+
+/* QR area */
+.qr-area{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:16px}
+.qr-wrap{background:#fff;padding:18px;border-radius:14px;box-shadow:0 12px 36px rgba(2,6,23,0.48)}
+.qr-img{width:320px;height:320px;max-width:92%;object-fit:contain;image-rendering:pixelated;border-radius:12px;display:block}
+.qr-meta{font-size:14px;color:var(--muted)}
+
+/* Actions */
+.actions{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;justify-content:center}
+.btn{padding:12px 16px;border-radius:12px;border:none;cursor:pointer;font-weight:800;transition:transform .12s cubic-bezier(.2,.9,.2,1), box-shadow .12s}
+.btn.primary{background:linear-gradient(90deg,var(--accentB),var(--accentA));color:#07101a;box-shadow:0 14px 36px rgba(80,100,220,0.09)}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+.btn.ghost[disabled]{opacity:0.46;cursor:not-allowed;}
+
+/* About and contact — ensure justified text */
+.split{display:grid;grid-template-columns:1fr 320px;gap:18px;margin-top:18px}
+.about{padding:14px;border-radius:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.02)}
+.about p{color:var(--muted);line-height:1.5;text-align:justify}
+.org-card{padding:14px;border-radius:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.02)}
+.socials{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.socials a{color:var(--muted)}
+
+/* Enhanced Guidelines Section */
+.guidelines {
+  margin-top: 24px;
+  padding: 20px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(155,107,255,0.2);
+  border-radius: 14px;
+  box-shadow: 0 4px 20px rgba(155,107,255,0.08);
+}
+
+.guidelines strong:first-child {
+  display: block;
+  color: #fff;
+  font-size: 16px;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.guidelines ul {
+  margin: 12px 0 0 20px;
+  padding: 0;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.guidelines li {
+  margin-bottom: 8px;
+}
+
+.guidelines li strong {
+  color: #fff;
+}
+
+
+/* modal */
+.modal{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;background:rgba(0,0,0,0.7);z-index:9999;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.modal.show{display:flex}
+.modal-card{width:92%;max-width:720px;background:#07101a;padding:20px;border-radius:12px;color:#fff;box-shadow:0 30px 80px rgba(0,0,0,0.6);margin:20px 0;max-height:90vh;overflow-y:auto}
+
+@media(max-width:920px){.split{grid-template-columns:1fr}.qr-img{width:260px;height:260px}.intro-title{font-size:clamp(13px,2.4vw,15px)}}
+@media(max-width:480px){.qr-img{width:200px;height:200px}.intro-stage{height:220px}.intro-title{font-size:clamp(12px,3.2vw,14px)}}
+.visually-hidden{position:absolute;left:-9999px}
+</style>
+<script defer src="/_vercel/insights/script.js"></script>
+</head>
+<body>
+
+<!-- THEME BG -->
+<div id="themeBg" class="theme-bg" aria-hidden="true"></div>
+<div class="bg-overlay" aria-hidden="true"></div>
+
+<!-- INTRO LAYER (centered headline + motto over canvas) -->
+<div id="introLayer">
+  <canvas id="introCanvas" width="1000" height="480" aria-hidden="true"></canvas>
+
+  <div class="intro-stage" aria-hidden="true">
+    <svg id="logoSvg" class="logo-svg" viewBox="0 0 1000 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="grad" x1="0" x2="1">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="40%" stop-color="#b084ff"/>
+          <stop offset="100%" stop-color="#6da6ff"/>
+        </linearGradient>
+        <linearGradient id="sweep" x1="0" x2="1">
+          <stop offset="0%" stop-color="#fff" stop-opacity="0"/>
+          <stop offset="40%" stop-color="#fff" stop-opacity="0.24"/>
+          <stop offset="70%" stop-color="#fff" stop-opacity="0.06"/>
+          <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Increased font-size so headline is clearly larger than motto -->
+      <text id="headline" x="50%" y="60%" text-anchor="middle" font-family="Impact, Arial Black, sans-serif" font-size="120" fill="url(#grad)" font-weight="900" style="letter-spacing:6px">
+        SPARKLE 3.0
+      </text>
+
+      <rect id="sweepRect" x="-520" y="-80" width="420" height="280" fill="url(#sweep)" style="mix-blend-mode:screen;opacity:0.98"></rect>
+    </svg>
+  </div>
+
+  <!-- center-styled motto; id left as introTag for JS compatibility -->
+  <div id="introTag" class="intro-title">Welcoming New Beginnings,<br>Celebrating Golden Endings</div>
+</div>
+
+<!-- APP -->
+<div class="wrap" id="app" aria-hidden="true" style="opacity:0;transform:translateY(12px)">
+
+  <header>
+    <img id="logoMain" class="logo-small" src="/assets/logo.png" alt="Sparkle 3.0" loading="eager" onerror="this.style.display='none'">
+    <h1 style="margin:6px 0 0 0;font-size:22px">Freshers' Party — Payment</h1>
+    <div class="subtitle">Secure • Minimal • Fast</div>
+  </header>
+
+  <section id="mainPanel" class="panel hidden" role="main" aria-labelledby="payHead">
+    <h2 id="payHead" class="visually-hidden">Payment</h2>
+
+    <div class="phase-row" id="phases" role="tablist" aria-label="Phases"></div>
+    <div class="selected" id="selectedInfo">Selected: —</div>
+    <div class="seats" id="seatsInfo">Seats left: —</div>
+
+    <div class="qr-area" id="qrArea">
+      <div class="qr-wrap">
+        <img id="qrImg" class="qr-img" src="/assets/qr1.png" alt="Payment QR" loading="lazy">
+      </div>
+      <div class="qr-meta">UPI ID — <strong id="upiId">—</strong></div>
+
+      <div class="actions">
+        <button id="downloadBtn" class="btn primary" type="button">Download QR</button>
+        <button id="howBtn" class="btn ghost" type="button">How to pay</button>
+        <button id="formBtn" class="btn ghost" type="button">Google Form</button>
+      </div>
+
+      <div class="guidelines">
+        <strong>⚠️ Important Guidelines</strong>
+        <ul>
+          <li>Phase 1 is open for payment. Phase 2 and 3 will be open soon.</li>
+          <li>Verify the amount before paying and <b>keep the transaction screenshot.</b></li>
+          <li style="color:#ffd93d"><strong style="color:#ffd93d">📋 Submit screenshot & UPI transaction ID via Google Form (required).</strong></li>
+          <li style="color:#ff6b6b"><strong>⚠️ Note: No refunds will be given after the payment is made.</strong></li>
+          <li>If you have any questions, please contact us at the contact details below.</li>
+          <li>Thank you for your support and follow us on Instagram for updates! 🎉</li>
+        </ul>
+      </div>
+
+      <div class="split">
+        <div class="about">
+          <h3 style="margin:0 0 10px 0">About Sparkle 3.0</h3>
+          <p>
+            Sparkle 3.0 is a fully student-driven celebration created to warmly welcome our newly admitted batch while also offering a heartfelt and graceful farewell to our beloved seniors. Embracing the motto “Welcoming New Beginnings, Celebrating Golden Endings,” the event brings together music, performances, joy and togetherness, making it a special night where new journeys begin and cherished chapters are honored with pride.
+        </p>
+          </p>
+        </div>
+
+        <aside class="org-card" aria-labelledby="orgHead">
+          <h3 id="orgHead" style="margin:0 0 8px 0">Organiser & Contact</h3>
+          <div style="color:var(--muted);line-height:1.6">
+            <div><strong>Organiser:</strong> Sparkle 3.0 Committee</div>
+            <div><strong>Phone:</strong> <a href="tel:+911234567890">+91 8980667112</a></div>
+            <div><strong>Email:</strong> <a href="mailto:contact@sparkle.example">sparkle.uvpce@gmail.com</a></div>
+
+            <div style="margin-top:8px"><strong>Follow us:</strong></div>
+            <div class="socials">
+              <a href="https://www.instagram.com/sparkle.uvpce" target="_blank" rel="noopener">Instagram • @sparkle3.0</a>
+              <a href="https://maps.app.goo.gl/K7aEVPNHssWAoT9R8" target="_blank" rel="noopener">Venue • Map</a>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+    </div>
+
+  </section>
+
+  <footer style="margin-top:18px;text-align:center;color:var(--muted)">© Sparkle 3.0 2026</footer>
+</div>
+
+<!-- How to pay modal -->
+<div id="howModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="modal-card" role="document">
+    <h2 id="howTitle" style="margin:0 0 10px 0;font-size:20px">How to pay — step-by-step</h2>
+    <p style="color:var(--muted);margin:0 0 10px 0;font-size:14px">Follow these exact steps for reliable payment and proof submission (Android & iPhone).</p>
+
+    <ol style="margin:10px 0 0 0;padding-left:20px;color:var(--muted);line-height:1.6">
+      <li><strong>Download the QR</strong> by tapping <em>Download QR</em>. Save the image to your phone (Photos/Gallery). Do not edit the file.</li>
+      <li style="margin-top:8px"><strong>Open a UPI app</strong> — Google Pay / PhonePe / Paytm / BHIM or bank UPI app.
+        <ul style="margin-top:6px;color:var(--muted)">
+          <li><strong>Android:</strong> Choose "Scan QR" → "Select from gallery" (icon may vary). Pick the saved image.</li>
+          <li><strong>iPhone / iOS:</strong> If app supports choosing from Photos, use that. Otherwise display the QR on another device and scan with the app camera.</li>
+        </ul>
+      </li>
+      <li style="margin-top:8px"><strong>Confirm pay details</strong>
+        <div style="color:var(--muted);margin-top:6px">
+          Confirm payee name / UPI ID and the <em>exact amount</em> for the selected phase before confirming the transaction.
+        </div>
+      </li>
+      <li style="margin-top:8px"><strong>Capture proof</strong>
+        <div style="color:var(--muted);margin-top:6px">
+          After payment, take a clear screenshot showing UPI ID, amount, transaction ID and timestamp. This screenshot is mandatory for verification.
+        </div>
+      </li>
+      <li style="margin-top:8px"><strong>Submit proof</strong>
+        <div style="color:var(--muted);margin-top:6px">
+          Return to this page and click <em>Google Form</em>. Upload the screenshot and enter the transaction ID exactly.
+        </div>
+      </li>
+      <li style="margin-top:8px"><strong>Fraud policy — strict action</strong>
+        <div style="color:#ffb3b3;margin-top:6px">
+          Uploading forged or manipulated payment screenshots is strictly prohibited. If the organisers detect a fake or tampered screenshot, the offender's submission will be rejected and the organising committee reserves the right to take strict action, including disqualification from the event and reporting to institutional authorities. Submit only genuine payment proofs.
+        </div>
+      </li>
+      <li style="margin-top:8px"><strong>Troubleshooting</strong>
+        <div style="color:var(--muted);margin-top:6px">
+          If the app doesn't allow selecting gallery images, scan the QR from another device or print the QR temporarily. Avoid in-app browsers; use Chrome or Safari.
+        </div>
+      </li>
+    </ol>
+
+    <div style="text-align:right;margin-top:20px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1)">
+      <button id="closeHow" class="btn primary" type="button" style="padding:10px 20px;font-size:15px">Understood</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================== CONFIG — edit capacities & amounts here ====================
+   Change `capacity` values to update seats; -1 means unlimited/remaining.
+============================================================================== */
+const CONFIG = {
+  phases: [
+    { key:'phase1', label:'Phase 1', amount:200, capacity: 600},
+    { key:'phase2', label:'Phase 2', amount:250, capacity:400 },
+    { key:'phase3', label:'Phase 3', amount:300, capacity:-1 }
+  ],
+  activePhaseIndex: 0,
+  qr: { img: '/assets/qr1.png', img2x: null, upiId: 'sparkleuvpce@upi' },
+  googleFormLink: 'https://forms.gle/sUVh4PZMpdyXnjDAA'
+};
+/* ================================================================================= */
+
+/* ---------- DOM refs (shared) ---------- */
+const phasesEl = document.getElementById('phases');
+const selectedInfo = document.getElementById('selectedInfo');
+const seatsInfo = document.getElementById('seatsInfo');
+const qrImg = document.getElementById('qrImg');
+const upiIdEl = document.getElementById('upiId');
+const downloadBtn = document.getElementById('downloadBtn');
+const howBtn = document.getElementById('howBtn');
+const formBtn = document.getElementById('formBtn');
+const howModal = document.getElementById('howModal');
+const closeHow = document.getElementById('closeHow');
+const sweepRect = document.getElementById('sweepRect');
+const introLayer = document.getElementById('introLayer');
+const introCanvas = document.getElementById('introCanvas');
+const appWrap = document.getElementById('app');
+const panel = document.getElementById('mainPanel');
+
+/* ---------- Phase rendering & QR --------- */
+function renderPhases(){
+  phasesEl.innerHTML = '';
+  CONFIG.phases.forEach((p,i) => {
+    const btn = document.createElement('button');
+    const isActive = (i === CONFIG.activePhaseIndex);
+    btn.className = 'phase' + (isActive ? ' active' : '') + (isActive ? '' : ' locked');
+    btn.type = 'button';
+    btn.innerHTML = `${p.label}<div style="font-size:12px;color:var(--muted)">₹${p.amount}</div>`;
+    if (!isActive) {
+      btn.disabled = true;
+      const lock = document.createElement('span');
+      lock.className = 'lock';
+      lock.title = 'Locked — contact organisers to open this phase';
+      lock.setAttribute('aria-hidden','true');
+      lock.textContent = '🔒';
+      btn.appendChild(lock);
+    } else {
+      btn.addEventListener('click', ()=> {
+        CONFIG.activePhaseIndex = i;
+        updateSelected();
+        renderPhases();
+      });
+    }
+    phasesEl.appendChild(btn);
+  });
+  updateSelected();
+}
+
+function updateSelected(){
+  const p = CONFIG.phases[CONFIG.activePhaseIndex];
+  selectedInfo.textContent = `${p.label}: ₹${p.amount}`;
+  let seatsText;
+  if (p.capacity === -1) seatsText = 'Seats: Remaining / open';
+  else if (p.capacity === 0) seatsText = 'Seats: Full';
+  else seatsText = `Seats left: ${p.capacity}`;
+  seatsInfo.textContent = seatsText;
+}
+
+function renderQr(){
+  if (CONFIG.qr.img2x) qrImg.srcset = `${CONFIG.qr.img} 1x, ${CONFIG.qr.img2x} 2x`;
+  qrImg.src = CONFIG.qr.img;
+  upiIdEl.textContent = CONFIG.qr.upiId || '';
+}
+
+function downloadQrImage(){
+  const src = qrImg.src || CONFIG.qr.img;
+  if (!src) return alert('QR image not configured');
+  fetch(src, { mode: 'cors' }).then(resp => {
+    if (!resp.ok) throw new Error('Image fetch failed');
+    return resp.blob();
+  }).then(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `sparkle_qr_${CONFIG.phases[CONFIG.activePhaseIndex].label.replace(/\s+/g,'')}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }).catch(()=> {
+    window.open(src, '_blank', 'noopener');
+    alert('Automatic download blocked — the QR image was opened in a new tab. Save it from there (long-press on mobile).');
+  });
+}
+
+function openGoogleForm(){
+  if (!CONFIG.googleFormLink) return alert('Google Form link not configured');
+  window.open(CONFIG.googleFormLink, '_blank', 'noopener');
+}
+
+/* How modal handlers */
+howBtn.addEventListener('click', ()=> howModal.classList.add('show'));
+closeHow.addEventListener('click', ()=> howModal.classList.remove('show'));
+howModal.addEventListener('click', (e)=> { if (e.target === howModal) howModal.classList.remove('show'); });
+
+downloadBtn.addEventListener('click', downloadQrImage);
+formBtn.addEventListener('click', openGoogleForm);
+
+/* --------- INTRO ANIMATION (canvas particles + sweep) --------- */
+let ctx = null;
+let DPR = Math.max(1, window.devicePixelRatio || 1);
+let particles = [];
+let running = true;
+let introVisible = true;
+let lastFrame = performance.now();
+let rafId = null;
+
+function resizeCanvas(){
+  DPR = Math.max(1, window.devicePixelRatio || 1);
+  const rect = introCanvas.getBoundingClientRect();
+  const w = Math.max(300, Math.floor(rect.width));
+  const h = Math.max(200, Math.floor(rect.height));
+  if (introCanvas.width !== Math.floor(w * DPR) || introCanvas.height !== Math.floor(h * DPR)) {
+    introCanvas.width = Math.floor(w * DPR);
+    introCanvas.height = Math.floor(h * DPR);
+  }
+  if (ctx) ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+
+function initCanvas(){
+  ctx = introCanvas.getContext('2d', { alpha: true });
+  resizeCanvas();
+}
+
+function createParticles(){
+  particles = [];
+  const width = introCanvas.width / DPR;
+  let N = Math.max(10, Math.floor(width / 60));
+  if (DPR < 1.5) N = Math.max(8, Math.floor(N * 0.9));
+  if (/Mobi|Android/i.test(navigator.userAgent)) N = Math.min(N, 36);
+  for (let i=0;i<N;i++){
+    particles.push({
+      x: Math.random() * width,
+      y: introCanvas.height / DPR + Math.random() * 220,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: - (0.8 + Math.random() * 1.6),
+      r: 1 + Math.random() * 6,
+      life: 120 + Math.random() * 200,
+      hue: 240 + Math.random() * 90
+    });
+  }
+}
+
+function particleLoop(now){
+  if (!running || !introVisible) return;
+  const dt = Math.min(40, now - lastFrame);
+  lastFrame = now;
+  const width = introCanvas.width / DPR;
+  const height = introCanvas.height / DPR;
+  ctx.clearRect(0,0,width,height);
+
+  for (let i=0;i<particles.length;i++){
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt * 0.12;
+    if (p.life <= 0 || p.y < -80) {
+      p.x = Math.random() * width;
+      p.y = height + 10 + Math.random() * 120;
+      p.vx = (Math.random() - 0.5) * 0.6;
+      p.vy = - (0.8 + Math.random() * 1.6);
+      p.r = 1 + Math.random() * 6;
+      p.life = 120 + Math.random() * 200;
+      p.hue = 240 + Math.random() * 90;
+    }
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 12);
+    g.addColorStop(0, `hsla(${p.hue},95%,70%,0.95)`);
+    g.addColorStop(0.25, `hsla(${p.hue},95%,70%,0.36)`);
+    g.addColorStop(1, `hsla(${p.hue},95%,70%,0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(Math.round(p.x - p.r * 6), Math.round(p.y - p.r * 6), p.r * 12, p.r * 12);
+  }
+}
+
+function animateSweep(duration = 3200, startX = -520, endX = 1320){
+  const start = performance.now();
+  function frame(now){
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const x = startX + (endX - startX) * eased;
+    if (sweepRect) sweepRect.setAttribute('x', String(x));
+    if (t < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+function runIntro(){
+  if (!ctx) initCanvas();
+  resizeCanvas();
+  createParticles();
+    // inside runIntro(), after animateSweep(...) and createParticles()
+  animateSweep(3200, -520, 1320);
+  // ... then:
+  // reveal tagline shortly after the sweep starts
+  setTimeout(showIntroTag, 300); // 300ms gives the sweep a small lead; adjust if needed
+
+  animateSweep(3200, -520, 1320);
+  lastFrame = performance.now();
+
+  function loop(now){
+    if (!introVisible) return;
+    particleLoop(now);
+    rafId = requestAnimationFrame(loop);
+  }
+  rafId = requestAnimationFrame(loop);
+
+  const total = 3200 + 650;
+  setTimeout(() => {
+    introLayer.style.transition = 'opacity .48s ease';
+    introLayer.style.opacity = '0';
+    setTimeout(() => {
+      introVisible = false;
+      if (rafId) cancelAnimationFrame(rafId);
+      ctx && ctx.clearRect(0,0,introCanvas.width,introCanvas.height);
+      introLayer.style.display = 'none';
+      revealMain();
+    }, 480);
+  }, total);
+}
+
+function showIntroTag(){
+  const t = document.getElementById('introTag');
+  if (!t) return;
+  // small delay so sweep & particles start first
+  t.style.opacity = '1';
+  t.style.transform = 'translateY(0)';
+}
+
+function revealMain(){
+  appWrap.setAttribute('aria-hidden','false');
+  appWrap.style.opacity = '1';
+  appWrap.style.transform = 'translateY(0)';
+  panel.classList.remove('hidden');
+}
+
+/* ---------- background parallax (mouse + touch) ---------- */
+(function backgroundParallax(){
+  const bg = document.getElementById('themeBg');
+  if (!bg) return;
+  let lastX = 0, lastY = 0;
+  let tick = null;
+  function updateTransform(x, y){
+    lastX += (x - lastX) * 0.06;
+    lastY += (y - lastY) * 0.06;
+    bg.style.transform = `translate3d(${lastX}px, ${lastY}px, 0) scale(1.02)`;
+  }
+  function onMove(e){
+    const w = window.innerWidth, h = window.innerHeight;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = (clientX / w - 0.5) * 22;
+    const y = (clientY / h - 0.5) * 12;
+    if (tick === null) {
+      tick = requestAnimationFrame(()=> { updateTransform(x,y); tick = null; });
+    }
+  }
+  window.addEventListener('mousemove', onMove, { passive: true });
+  window.addEventListener('touchmove', onMove, { passive: true });
+})();
+
+/* ---------- visibility & resize handling ---------- */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    running = false; if (rafId) cancelAnimationFrame(rafId);
+  } else {
+    running = true;
+    if (introVisible) { lastFrame = performance.now(); rafId = requestAnimationFrame(function resume(now){ particleLoop(now); rafId = requestAnimationFrame(resume); }); }
+  }
+});
+
+let resizeTimer = null;
+function onResize(){
+  resizeCanvas();
+  if (introVisible) createParticles();
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=> { resizeCanvas(); if (introVisible) createParticles(); }, 120);
+}
+window.addEventListener('resize', onResize, { passive: true });
+
+/* ---------- UI wiring ---------- */
+howBtn.addEventListener('click', ()=> howModal.classList.add('show'));
+closeHow.addEventListener('click', ()=> howModal.classList.remove('show'));
+howModal.addEventListener('click', (e) => { if (e.target === howModal) howModal.classList.remove('show'); });
+formBtn.addEventListener('click', ()=> { if (!CONFIG.googleFormLink) return alert('Google Form not configured'); window.open(CONFIG.googleFormLink, '_blank', 'noopener'); });
+
+/* ---------- init on DOM ready ---------- */
+document.addEventListener('DOMContentLoaded', () => {
+  appWrap.setAttribute('aria-hidden', 'true');
+  appWrap.style.opacity = '0';
+  appWrap.style.transform = 'translateY(12px)';
+  initCanvas();
+  renderPhases();
+  renderQr();
+  runIntro();
+  // live region for accessibility
+  const live = document.createElement('div'); live.style.position='absolute'; live.style.left='-9999px'; live.setAttribute('aria-live','polite'); live.textContent = `Open phase: ${CONFIG.phases[CONFIG.activePhaseIndex].label}`; document.body.appendChild(live);
+});
+</script>
+
+</body>
+</html>
+
